@@ -9,14 +9,22 @@ contract HyperclusterFactory {
 
   event CampaignCreated(address campaign_address, address creator);
 
-  function createCampaign(string calldata name, address erc20) public payable returns(address)  {
+  function createCampaign(string calldata name, address reward_token, address datafeed_address) public payable returns(address)  {
     // find price of erc20 token, set that in campaign
-    HyperclusterCampaign c = new HyperclusterCampaign(name, erc20, tx.origin);
-    campaigns.push(address(c));
-    emit CampaignCreated(address(c), tx.origin);
+
+    bytes32 _salt = keccak256(abi.encodePacked(name, reward_token, tx.origin, datafeed_address));
+
+    address c = address(new HyperclusterCampaign{salt: _salt}(name, reward_token, tx.origin, datafeed_address));
+
+    // HyperclusterCampaign c = new HyperclusterCampaign(name, reward_token, tx.origin, datafeed_address);
+    campaigns.push(c);
+    emit CampaignCreated(c, tx.origin);
     return address(c);
   }
 
+  function getCampaigns() public view returns (address[] memory) {
+    return campaigns;
+  }
 
 }
 

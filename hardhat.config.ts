@@ -5,9 +5,10 @@ dotenv.configDotenv()
 
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.19",
+  solidity: "0.8.20",
   defaultNetwork: "sepolia",
   networks: {
+    hardhat: {},
     sepolia: {
       chainId: 11155111,
       url: process.env.ETH_SEPOLIA,

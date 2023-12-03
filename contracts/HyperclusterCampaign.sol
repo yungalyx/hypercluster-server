@@ -4,17 +4,18 @@ pragma solidity >= 0.8.0;
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/FunctionsClient.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/libraries/FunctionsRequest.sol";
+import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
   using FunctionsRequest for FunctionsRequest.Request;
 
   // fields: organize this pls 
-  AggregatorV3Interface internal datafeed;
+  AggregatorV3Interface internal dataFeed;
   bool public isActive;
   bool public locked;
   string public name;
-  address public owner;
+  address public campaignOwner;
   address public rewardToken;
   int public startPrice;
   address[] users;
@@ -42,46 +43,45 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
     locked = false;
   }
   
-  modifier onlyOwner() {
-    require(msg.sender == owner, "Not owner"); 
+  modifier onlyActive() {
+    require(isActive == true, "Campaign is not active");
     _;
   }
-  
-  modifier isActive() {
-    require(isActive == true, "Campaign is not active");
-  }
 
-  constructor(string memory _name, address _erc20, address _owner, address _datafeed) internal {
-    FunctionsClient(0xb83E47C2bC239B3bf370bc41e1459A34b41238D0); // router for sepolia 
-    ConfirmedOwner(msg.sender);
+  constructor(string memory _name, address _erc20, address _owner, address _datafeed) public
+    FunctionsClient(0xb83E47C2bC239B3bf370bc41e1459A34b41238D0) 
+    ConfirmedOwner(msg.sender) {
+    // router for sepolia 
+  
     isActive = false;
-    owner = _owner;
+    campaignOwner = _owner;
     name = _name;
     rewardToken = _erc20;
-    datafeed = AggregatorV3Interface(_datafeed);
-    getStartPrice();
+    dataFeed = AggregatorV3Interface(_datafeed);
     
   }
 
-  function getStartPrice() private {
+  function getStartPrice() private view returns (int) {
     ( /* uint80 roundID */,
       int answer,
       /*uint startedAt*/,
       /*uint timeStamp*/,
       /*uint80 answeredInRound*/
     ) = dataFeed.latestRoundData();
-    startPrice = answer;
+    return answer;
 
   }
 
-  function acceptReferral(address referrer) external isActive() {
+  function acceptReferral(address referrer) external onlyActive() {
     users.push(tx.origin);
     emit ReferralAdded(referrer, tx.origin);
   }
 
 
-  function deposit() public {
-    IERC20(rewardToken).transfer(address(this), tx.origin);
+  function deposit(uint256 _amount) public {
+    startPrice = getStartPrice();
+    IERC20(rewardToken).approve(address(this), _amount);
+    IERC20(rewardToken).transferFrom(tx.origin, address(this), _amount);
     require(IERC20(rewardToken).balanceOf(address(this)) > 0, "Deposit Failed");
     isActive = true;
   }
@@ -89,7 +89,7 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
   function claimRewards() public noReentrancy() {
     if (checkUserInCampaign(tx.origin)) {
       // calculate their rewards from off chain and redistribute
-      sendRequest(); // TODO
+      // sendRequest(); // TODO
     } 
   }
 
@@ -116,6 +116,9 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
         "const { data } = apiResponse;"
         "return Functions.encodeUint256(data.balance);";
 
+  uint32 gasLimit = 300000;
+
+  bytes32 donID = 0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000; // ETH Sepolia
 
   function sendRequest(
       uint64 subscriptionId,
@@ -147,8 +150,11 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
         // Update the contract's state variables with the response and any errors
         s_lastResponse = response;
         // character = string(response);
-
-        fulfillClaimRewards(requestId, response);
+        string memory amount = string(response);
+        (uint256 amt, bool valid) = strToUint(amount);
+        if (valid) {
+           fulfillClaimRewards(requestId, amt);
+        } 
 
         s_lastError = err;
 
@@ -158,11 +164,22 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
         //emit Response(requestId, character, s_lastResponse, s_lastError);
     }
 
-    function fulfillClaimRewards(bytes32 requestId, bytes response) {
-      uint256 amt = uint256(response);
+    function fulfillClaimRewards(bytes32 requestId, uint256 amt) public {
       require(amt > 0, "No rewards to be claimed");
       IERC20(rewardToken).transfer(currentWithdrawer, amt);
       emit RewardClaimed(currentWithdrawer, amt);
+    }
+
+    function strToUint(string memory _str) public pure returns(uint256 res, bool err) {
+      
+      for (uint256 i = 0; i < bytes(_str).length; i++) {
+          if ((uint8(bytes(_str)[i]) - 48) < 0 || (uint8(bytes(_str)[i]) - 48) > 9) {
+              return (0, false);
+          }
+          res += (uint8(bytes(_str)[i]) - 48) * 10**(bytes(_str).length - i - 1);
+      }
+    
+      return (res, true);
     }
 
 }
