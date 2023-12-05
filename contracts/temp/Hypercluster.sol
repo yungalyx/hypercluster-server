@@ -48,6 +48,7 @@ contract Hypercluster is ICampaign{
     event ReferralAdded(address sender, address referral);
     event RewardsClaimed(address claimer,uint amount);
     event MilestoneReached(uint256 milestone);
+    event BotCheckFailed(address botAddress);
 
 
     function addReferral(address sender)public{
@@ -101,6 +102,11 @@ contract Hypercluster is ICampaign{
         totalSupply-=rewards;
         emit MilestoneReached(milestonesReached);
         return true;
+    }
+
+    function failBotCheck(address botAddress)public{
+        require(referralTier[botAddress]==0,"Already in network");
+        emit BotCheckFailed(botAddress);
     }
 
     function _getNextMilestoneRewards() internal view returns(uint256){
