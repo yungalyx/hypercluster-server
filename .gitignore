@@ -3,6 +3,7 @@ node_modules
 .env.enc
 
 .husky
+build
 
 # Hardhat files
 /cache
