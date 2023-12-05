@@ -2,9 +2,14 @@
 pragma solidity >= 0.8.0;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/FunctionsClient.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/libraries/FunctionsRequest.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
+
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
 
@@ -29,17 +34,22 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
   uint256 public thresholdPrice;
   
   // chainlink Functions
+  uint64 public sourceChainSelector ;
+  address public router;
+  address public immutable i_link;
   bytes32 public s_lastRequestId;
   bytes public s_lastResponse;
   bytes public s_lastError;
   address private currentWithdrawer;
+ 
+  mapping(address=>uint256) public rewards;
+  // block.timestamp
 
-  
-  // events
+ // events
   event ReferralAdded(address referrer, address refferred);
   event RewardClaimed(address user, uint256 amt_claimed);
   event Response(bytes32 indexed requestId, bytes response, bytes err);
-
+  event TokensSent(bytes32 messageId, address receiver, uint256 amount, uint64 destinationChainSelector);
   // errors
   error UnexpectedRequestID(bytes32 requestId);
 
@@ -57,10 +67,13 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
   }
 
   // setting up for testnet 
-  constructor(string memory _name, address _erc20, address _owner, address _pricefeed, address _functionRouter) public
+  
+  constructor(string memory _name, address _erc20, address _owner, address _pricefeed ,uint64 _sourceChainSelector, address _link, address _router, address _functionRouter) public
     FunctionsClient(_functionRouter) 
     ConfirmedOwner(msg.sender) {
-  
+
+      // FunctionsClient(0xb83E47C2bC239B3bf370bc41e1459A34b41238D0) 
+  sourceChainSelector=_sourceChainSelector;
     isActive = false;
     campaignOwner = _owner;
     userTier[_owner] = -1; 
@@ -68,7 +81,8 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
     rewardToken = _erc20;
     startPrice = setPrice();
     dataFeed = AggregatorV3Interface(_pricefeed);
-    
+    i_link=_link;
+    router=_router;
   }
 
   // only called once during constrcutor 
@@ -128,10 +142,55 @@ contract HyperclusterCampaign is FunctionsClient, ConfirmedOwner{
   function claimRewards() public noReentrancy() {
     startPrice = getStartPrice();
     if (checkUserInCampaign(msg.sender)) {
+  function deposit(uint256 _amount) public {
+    startPrice = getStartPrice();
+    require(_amount>0, "Invalid Deposit");
+    require(IERC20(rewardToken).allowance(tx.origin, address(this)) >= _amount, "Approve tokens first");
+    IERC20(rewardToken).transferFrom(tx.origin, address(this), _amount);
+    isActive = true;
+  }
+
+  function claimRewards(uint64 _destinationChainSelector) public noReentrancy() {
+    if (checkUserInCampaign(tx.origin)) {
+      require(IERC20(rewardToken).balanceOf(address(this))>rewards[tx.origin], "Rewards depleted");
+      if(_destinationChainSelector==sourceChainSelector||_destinationChainSelector==0)
+      {
+        IERC20(rewardToken).transfer(tx.origin, rewards[tx.origin]);
+      }else{
+        // THE REWARD TOKEN MUST BE CCIP-BnM or CCIP-LnM
+        _sendRewardsCrosschain(tx.origin, rewards[tx.origin],  _destinationChainSelector);
+      }
       // calculate their rewards from off chain and redistribute
       // sendRequest(); // TODO
     } 
   }
+
+  function _sendRewardsCrosschain(address receiver, uint256 amount,  uint64 _destinationChainSelector) internal {
+        IERC20(rewardToken).approve(router, amount);
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({token: rewardToken, amount: amount});
+         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
+            receiver: abi.encode(receiver),
+            data: "",
+            tokenAmounts: tokenAmounts,
+            extraArgs: "",
+            feeToken: i_link 
+        });
+
+        uint256 fee = IRouterClient(router).getFee(
+            _destinationChainSelector,
+            message
+        );
+      require(LinkTokenInterface(i_link).balanceOf(address(this))>=fee, "Not enough LINK");
+        bytes32 messageId;
+        LinkTokenInterface(i_link).approve(router, fee);
+            messageId = IRouterClient(router).ccipSend(
+                _destinationChainSelector,
+                message
+            );
+        emit TokensSent(messageId, receiver,amount,_destinationChainSelector);
+        
+    }
 
 
   function claimRewards() public noReentrancy() {
