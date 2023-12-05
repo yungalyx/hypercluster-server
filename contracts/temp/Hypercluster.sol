@@ -46,7 +46,7 @@ contract Hypercluster is ICampaign{
 
 
     event ReferralAdded(address sender, address referral);
-    event RewardsClaimed(address claimer,uint amount);
+    event RewardsClaimed(address claimer,uint amount,uint64 destinationSelector);
     event MilestoneReached(uint256 milestone);
     event BotCheckFailed(address botAddress);
 
@@ -59,14 +59,14 @@ contract Hypercluster is ICampaign{
         emit ReferralAdded(sender,msg.sender);
     }
 
-    function claimRewards()public{
+    function claimRewards(uint64 destinationSelector)public{
         uint rewards=_getRewards();
         require(rewards>0,"No rewards");
         require(totalSupply>=rewards,"Not enough rewards");
         milestoneRewards[milestonesReached]-=rewards;
         claimedMilestones[msg.sender]=milestonesReached;
         // TODO: transfer rewards
-        emit RewardsClaimed(msg.sender,rewards);
+        emit RewardsClaimed(msg.sender,rewards,destinationSelector);
     }
 
     function getRewards()public view returns(uint256){

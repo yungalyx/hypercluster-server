@@ -14,7 +14,7 @@ task("verify-contract", "Verifies contract")
       console.log("\nVerifying contract...")
       await run("verify:verify", {
         address: taskArgs.contract,
-        constructorArguments: [],
+        constructorArguments: ["0x25a401df559B9fF88dbA1692498aa0377abFC2FB"],
       })
       console.log("Contract verified")
     } catch (error) {
