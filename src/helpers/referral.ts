@@ -1,4 +1,4 @@
-import { CipherKey, createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
+import { CipherKey, createCipheriv, createDecipheriv } from "node:crypto"
 import dotenv from "dotenv"
 import { DecryptedRefferalCodeResponse } from "./interfaces";
 dotenv.configDotenv()
@@ -9,8 +9,11 @@ const iv = Buffer.from(process.env.INVARIANT as string, 'hex');
 const cipher = createCipheriv("aes-256-cbc", ek, iv)
 const decipher = createDecipheriv('aes-256-cbc', ek, iv);
 
+
 // generates a referal link that can only be used by a specific address
 export function generatePrivateReferralLink(referrer_address: string, referee_address: string, campaign_id: string) {
+
+  const cipher = createCipheriv('aes-256-cbc', ek, iv);
 
   const plaintext =  referrer_address + "/" + campaign_id + "/" + referee_address;
 
@@ -25,8 +28,9 @@ export function generatePrivateReferralLink(referrer_address: string, referee_ad
 }
 
 // generates a referral link that can be used by anyone
-export function generateReferralLink(referrer_address: string, campaign_id: string) {
+export function generateReferralLink(referrer_address: string, campaign_id: string): string {
 
+  const cipher = createCipheriv('aes-256-cbc', ek, iv);
   const plaintext = referrer_address + "/" + campaign_id;
 
   // Update the cipher with the plaintext
@@ -40,6 +44,8 @@ export function generateReferralLink(referrer_address: string, campaign_id: stri
 
 export function resolveReferralLink(encrypted: string): DecryptedRefferalCodeResponse {
   // Create a decipher using AES-CBC with the same key and IV
+
+  const decipher = createDecipheriv('aes-256-cbc', ek, iv);
  
   // // Update the decipher with the encrypted data
   let decryptedBuffer = decipher.update(encrypted, 'hex', 'utf-8');

@@ -4,11 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npx hardhat test --network hardhat",
-    "test-sepolia": "npx hardhat test --network sepolia",
-    "test-integration": "npx hardhat test --grep 'integration' --network sepolia",
-    "test-local": "npx hardhat test --grep 'local' --network hardhat",
-    "start": "npx ts-node src/index.ts",
+    "start": "npx hardhat node",
+    "test": "npx hardhat test --grep 'local' --network hardhat",
+    "call": "npx ts-node src/helpers/jsonrpc.ts",
+    "server": "npx ts-node src/index.ts",
     "build": "tsc"
   },
   "keywords": [],

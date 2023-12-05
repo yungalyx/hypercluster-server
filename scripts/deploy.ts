@@ -13,7 +13,7 @@ async function main() {
   // await lock.waitForDeployment();
 
   const Factory = await ethers.getContractFactory("HyperclusterFactory");
-  const factory = await Factory.deploy();
+  const factory = await Factory.deploy("0xb83E47C2bC239B3bf370bc41e1459A34b41238D0");
   console.log("Contract Deployed to Address:", await factory.getAddress());
 
   //const factory = await ethers.deployContract("HyperclusterFactory", [])
