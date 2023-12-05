@@ -10,9 +10,9 @@ contract Hypercluster is ICampaign{
     address public rewardTokenAddress;
     address public rootReferral;
     uint256 public totalSupply;
-    uint256 public rewardPercent;
-    uint256 public startIn;
-    uint256 public endIn;
+    uint256 public rewardPercentPerMilestone;
+    uint256 public startTimestamp;
+    uint256 public endTimestamp;
     string public metadata;
     address public safeAddress;
 
@@ -35,11 +35,11 @@ contract Hypercluster is ICampaign{
         rewardTokenAddress = params.rewardTokenAddress;
         rootReferral = params.rootReferral;
         totalSupply = params.totalSupply;
-        startIn = params.startIn;
-        endIn = params.endIn;
+        startTimestamp = block.timestamp + params.startIn;
+        endTimestamp = block.timestamp + params.endIn;
         metadata = params.metadata;
         safeAddress = _safeAddress;
-        rewardPercent = params.rewardPercent;
+        rewardPercentPerMilestone = params.rewardPercentPerMilestone;
         referralTier[rootReferral]=1;
         return true;
     }
@@ -96,7 +96,7 @@ contract Hypercluster is ICampaign{
 
     function reachMilestone() public returns(bool){
         milestonesReached++;
-        uint rewards=totalSupply*rewardPercent/100;
+        uint rewards=totalSupply*rewardPercentPerMilestone/100;
         if(rewards>0) return false;
         milestoneRewards[milestonesReached]=rewards;
         totalSupply-=rewards;
@@ -110,6 +110,6 @@ contract Hypercluster is ICampaign{
     }
 
     function _getNextMilestoneRewards() internal view returns(uint256){
-        return totalSupply*rewardPercent/100;
+        return totalSupply*rewardPercentPerMilestone/100;
     }
 }

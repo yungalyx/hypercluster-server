@@ -8,9 +8,9 @@ interface ICampaign{
     struct CreateCampaignParams{
         address rewardTokenAddress;
         address rootReferral;
+        uint256 rewardPercentPerMilestone;
         uint256 totalSupply;
         uint256 startIn;
-        uint256 rewardPercent;
         uint256 endIn;
         string metadata;
     }
