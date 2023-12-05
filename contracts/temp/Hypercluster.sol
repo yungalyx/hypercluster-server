@@ -5,7 +5,7 @@ pragma solidity >= 0.8.0;
 import "../interface/ICampaign.sol";
 
 
-contract TempHyperclusterCampaign is ICampaign{
+contract Hypercluster is ICampaign{
 
     address public rewardTokenAddress;
     address public rootReferral;

@@ -42,6 +42,7 @@ contract HyperclusterFactory {
     emit CamapignCreated(address(campaign),address(safe),params.rewardTokenAddress,params.rootReferral,params.rewardPercent,params.totalSupply,params.startIn,params.endIn,params.metadata);
     campaigns[address(campaign)]=true;
     nonce++;
+    return address(campaign);
   }
 
   function _deployProxy(
