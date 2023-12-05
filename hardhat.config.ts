@@ -1,30 +1,49 @@
-import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
-import dotenv from "dotenv"
-dotenv.configDotenv()
+require("@nomicfoundation/hardhat-toolbox");
+require("./tasks");
+const { networks } = require("./networks");
 
+const REPORT_GAS =
+  process.env.REPORT_GAS?.toLowerCase() === "true" ? true : false;
 
-const config: HardhatUserConfig = {
-  solidity: "0.8.20",
-  defaultNetwork: "hardhat",
+const SOLC_SETTINGS = {
+  optimizer: {
+    enabled: true,
+    runs: 1_000,
+  },
+};
+
+const config = {
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.20",
+        settings: SOLC_SETTINGS,
+      },
+    ],
+  },
   networks: {
-    hardhat: {
-      forking: {
-        enabled: true, 
-        url: "https://eth-mainnet.g.alchemy.com/v2/Em-KZ_xfF6hx2jtKFo3l3YKDGhghwBgC",
-      }
+    ...networks,
+  },
+  etherscan: {
+    apiKey: {
+      avalancheFujiTestnet: networks.avalancheFuji.verifyApiKey,
     },
-    sepolia: {
-      chainId: 11155111,
-      url: process.env.ETH_SEPOLIA,
-      accounts: [`0x${process.env.WALLET_PK}`]
-    },
-    eth: {
-      chainId: 1, 
-      url: process.env.ETH_MAINNET, 
-      accounts: [`0x${process.env.WALLET_PK}`]
-    }
-  }
+  },
+  gasReporter: {
+    enabled: REPORT_GAS,
+    currency: "USD",
+    outputFile: "gas-report.txt",
+    noColors: true,
+  },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./build/cache",
+    artifacts: "./build/artifacts",
+  },
+  mocha: {
+    timeout: 200000, // 200 seconds max for running tests
+  },
 };
 
 export default config;
