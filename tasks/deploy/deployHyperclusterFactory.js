@@ -8,7 +8,7 @@ task("deploy-factory", "Deploys the HyperclusterFactory contract")
     console.log("\n__Compiling Contracts__")
     await run("compile")
 
-    const hyperclusterImplementation = "0x8ff8ddEa89559ce6fD8a7530578378Feb6FE66a5"
+    const hyperclusterImplementation = "0x25a401df559B9fF88dbA1692498aa0377abFC2FB"
     const hyperclusterFactory = await ethers.getContractFactory("HyperclusterFactory")
     const hypercluster = await hyperclusterFactory.deploy(hyperclusterImplementation)
 
