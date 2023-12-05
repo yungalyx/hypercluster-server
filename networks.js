@@ -1,29 +1,27 @@
-require("@chainlink/env-enc").config();
-const DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS = 3;
+require("@chainlink/env-enc").config()
+const DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS = 3
 
-const npmCommand = process.env.npm_lifecycle_event;
-const isTestEnvironment = npmCommand == "test" || npmCommand == "test:unit";
+const npmCommand = process.env.npm_lifecycle_event
+const isTestEnvironment = npmCommand == "test" || npmCommand == "test:unit"
 
 // Set EVM private keys (required)
-const PRIVATE_KEY = process.env.WALLET_PK;
+const PRIVATE_KEY = process.env.WALLET_PK
 
 if (!isTestEnvironment && !PRIVATE_KEY) {
-  throw Error(
-    "Set the PRIVATE_KEY environment variable with your EVM wallet private key"
-  );
+  throw Error("Set the PRIVATE_KEY environment variable with your EVM wallet private key")
 }
 
-const accounts = [];
+const accounts = []
 if (PRIVATE_KEY) {
-  accounts.push(PRIVATE_KEY);
+  accounts.push(PRIVATE_KEY)
 }
 const networks = {
   avalancheFuji: {
-    url: process.env.AVALANCHE_FUJI_RPC_URL || "UNSET",
+    url: process.env.AVAX_FUJI || "UNSET",
     gasPrice: undefined,
     nonce: undefined,
     accounts,
-    verifyApiKey: process.env.FUJI_SNOWTRACE_API_KEY || "UNSET",
+    verifyApiKey: "snowtrace",
     chainId: 43113,
     confirmations: DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS,
     nativeCurrencySymbol: "AVAX",
@@ -37,8 +35,8 @@ const networks = {
       "https://02.functions-gateway.testnet.chain.link/",
     ],
   },
-};
+}
 
 module.exports = {
   networks,
-};
+}

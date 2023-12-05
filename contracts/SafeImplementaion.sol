@@ -5,7 +5,7 @@ pragma solidity >= 0.8.0;
 
 
 
-contract Safe{
+contract SafeImplementation{
 
     address public campaignAddress;
 
