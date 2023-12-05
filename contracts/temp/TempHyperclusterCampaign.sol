@@ -63,6 +63,8 @@ contract TempHyperclusterCampaign is ICampaign{
         require(rewards>0,"No rewards");
         require(totalSupply>=rewards,"Not enough rewards");
         milestoneRewards[milestonesReached]-=rewards;
+        claimedMilestones[msg.sender]=milestonesReached;
+        // TODO: transfer rewards
         emit RewardsClaimed(msg.sender,rewards);
     }
 
