@@ -22,7 +22,7 @@ contract HyperclusterFactory {
     }
 
 
-    event CamapignCreated(address campaign, address safeAddress, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp,string metadata);
+    event CampaignCreated(address campaign, address safeAddress, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp,string metadata);
 
 
     // First create Safe
@@ -38,7 +38,16 @@ contract HyperclusterFactory {
     safe.initialize(address(campaign)); 
     campaign.initialize(params,address(safe));
 
-    emit CamapignCreated(address(campaign),address(safe),params.rewardTokenAddress,params.rootReferral,params.rewardPercentPerMilestone,params.totalSupply,block.timestamp+params.startIn,block.timestamp+params.endIn,params.metadata);
+    emit CampaignCreated(
+      address(campaign),
+      address(safe),
+      params.rewardTokenAddress,
+      params.rootReferral,
+      params.rewardPercentPerMilestone,
+      params.totalSupply,
+      block.timestamp+params.startIn,
+      block.timestamp+params.endIn,
+      params.metadata);
     campaigns[address(campaign)]=true;
     nonce++;
     return address(campaign);

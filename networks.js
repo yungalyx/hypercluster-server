@@ -1,4 +1,5 @@
 require("@chainlink/env-enc").config()
+require('dotenv').config()
 const DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS = 3
 
 const npmCommand = process.env.npm_lifecycle_event
