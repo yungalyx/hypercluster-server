@@ -9,6 +9,8 @@ import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/Confir
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/libraries/FunctionsRequest.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 
 import "../interface/ICampaign.sol";
 
@@ -25,7 +27,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     mapping(address=>address[]) public referrals;
     mapping(address=>uint256)public referralTier;
 
-    address public rewardTokenAddress;
+    IERC20 public rewardToken;
     address public rootReferral;
     uint256 public totalSupply;
     uint256 public milestoneTotalSupply;
@@ -39,17 +41,17 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
 
     AggregatorV3Interface public dataFeed;
     LinkTokenInterface public constant linkToken=LinkTokenInterface(0x779877A7B0D9E8603169DdbD7836e478b4624789);
+    IRouterClient public constant ccipRouter=IRouterClient(0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59);
     address public constant functionsRouter=0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
     bytes32 public constant donId=0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
     uint64 public constant sourceChainSelector=16015286601757825753;
-    address public constant ccipRouter=0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59;
 
     constructor()  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {}
 
     function initialize(CreateCampaignParams memory params,uint256 _upKeepId,address _creator) public returns(bool){
         name=params.name;
         metadata = params.metadata;
-        rewardTokenAddress = params.rewardTokenAddress;
+        rewardToken = IERC20(params.rewardTokenAddress);
         rootReferral = params.rootReferral;
         creator=_creator;
         totalSupply = params.totalSupply;
@@ -84,17 +86,71 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     }
 
 
-    function claimRewards(uint64 destinationSelector)public{
+    function claimRewards(address destinationAddress,uint64 destinationSelector)public{
         uint rewards=_getRewards();
         require(rewards>0,"No rewards");
-        require(totalSupply>=rewards,"Not enough rewards");
+        require(rewardToken.balanceOf(address(this))>=rewards,"Not enough rewards");
         milestoneRewards[milestonesReached]-=rewards;
         claimedMilestones[msg.sender]=milestonesReached;
-        // TODO: transfer rewards
+
+        if(destinationSelector==sourceChainSelector) rewardToken.transfer(destinationAddress,rewards);
+        else{
+            _transferCrosschain(destinationAddress, destinationSelector, rewards);
+        }
         emit RewardsClaimed(msg.sender,rewards,destinationSelector);
     }
 
-    // NOT FOR PRODUCTION. TESTING FUNCTION FOR THIS HACKATHON. SHOULD BE CALLED BY UPKEEP IN PRODUCTION
+    function _transferCrosschain(address destinationAddress,uint64 _destinationChainSelector,uint256 rewards) internal returns(bytes32 messageId)
+    {
+        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
+                destinationAddress,
+                address(rewardToken),
+                rewards,
+                address(linkToken)
+            );
+
+            uint256 fees = ccipRouter.getFee(
+                _destinationChainSelector,
+                evm2AnyMessage
+            );
+
+            require(fees>linkToken.balanceOf(address(this)),"Not enough LINK to claim crosschain");
+
+            linkToken.approve(address(ccipRouter),fees);
+            rewardToken.approve(address(ccipRouter),rewards);
+
+            messageId = ccipRouter.ccipSend(
+                _destinationChainSelector,
+                evm2AnyMessage
+            );
+
+            return messageId;
+    }
+
+    function _buildCCIPMessage(
+        address _receiver,
+        address _token,
+        uint256 _amount,
+        address _feeTokenAddress
+    ) internal pure returns (Client.EVM2AnyMessage memory) {
+        Client.EVMTokenAmount[]
+            memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({
+            token: _token,
+            amount: _amount
+        });
+
+        return
+            Client.EVM2AnyMessage({
+                receiver: abi.encode(_receiver), 
+                data: "", 
+                tokenAmounts: tokenAmounts, 
+                extraArgs: "",
+                feeToken: _feeTokenAddress
+            });
+    }
+
+    // NOT FOR PRODUCTION. TESTING FUNCTION FOR THIS HACKATHON. IN PRODUCTION, IT WILL BE CALLED ONLY BY `performUpkeep` function
     function reachMilestone() external returns(bool){
         return _reachMilestone();
     }
