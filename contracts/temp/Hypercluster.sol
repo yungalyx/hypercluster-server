@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "../interface/ICampaign.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -10,8 +9,8 @@ import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/Confir
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/libraries/FunctionsRequest.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
-// chainlink Functions 0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0
 
+import "../interface/ICampaign.sol";
 
 contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationCompatibleInterface {
 
@@ -84,13 +83,6 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         emit ReferralAdded(sender,msg.sender);
     }
 
-    function getReferred(address sender) public view returns (address[] memory){
-      return referrals[sender];
-    }
-
-    function isInCampaign(address user) public view returns (bool) {
-        return referralTier[user] > 0;
-    }
 
     function claimRewards(uint64 destinationSelector)public{
         uint rewards=_getRewards();
@@ -102,44 +94,19 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         emit RewardsClaimed(msg.sender,rewards,destinationSelector);
     }
 
-    function getRewards()external view returns(uint256){
-        return _getRewards();
+    // NOT FOR PRODUCTION. TESTING FUNCTION FOR THIS HACKATHON. SHOULD BE CALLED BY UPKEEP IN PRODUCTION
+    function reachMilestone() external returns(bool){
+        return _reachMilestone();
     }
 
-    function _getRewards() internal view returns(uint256){
-        uint256 _tier=referralTier[msg.sender];
-        uint256 _claimedMilestones=claimedMilestones[msg.sender];
-
-        if(milestonesReached>_claimedMilestones)
-        {
-            uint256 _rewards=0;
-            for(uint i=_claimedMilestones+1;i<=milestonesReached;i++) if(_rewards>0) _rewards+=_tierToRewards(i,_tier);
-            return _rewards;
-        }else return 0;
-       
-    }
-
-    function _tierToRewards(uint256 milestone,uint256 tier) internal view returns(uint256){
-        uint256 _milestoneReward=milestoneRewards[milestone];
-        if(tier<3) return _milestoneReward*(11-tier)/100;
-        else if(tier<10) return _milestoneReward*(10-tier)/100;
-        else return _milestoneReward*(5**(tier-9))/(10*(tier-8));
-    }
-
-
-    function reachMilestone() public returns(bool){
+    function _reachMilestone() internal returns(bool){
         milestonesReached++;
         uint rewards=milestoneTotalSupply*rewardPercentPerMilestone/100;
-        if(rewards>0) return false;
+        if(rewards==0) return false;
         milestoneRewards[milestonesReached]=rewards;
         milestoneTotalSupply-=rewards;
         emit MilestoneReached(milestonesReached);
         return true;
-    }
-
-
-    function _getNextMilestoneRewards() internal view returns(uint256){
-        return milestoneTotalSupply*rewardPercentPerMilestone/100;
     }
 
     function fulfillRequest(
@@ -147,16 +114,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         bytes memory response,
         bytes memory err
     ) internal override {
-        // if (s_lastRequestId != requestId) {
-        //     revert UnexpectedRequestID(requestId); // Check if request IDs match
-        // }
-        // // Update the contract's state variables with the response and any errors
-        // s_lastResponse = response;
-        // character = string(response);
-        // s_lastError = err;
-
-        // // Emit an event to log the response
-        // emit Response(requestId, character, s_lastResponse, s_lastError);
+        
     }
 
     function _getPrice() internal view returns (int) {
@@ -177,12 +135,44 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         upkeepNeeded = currentPrice >= thresholdPrice;
     }
 
-    function performUpkeep(bytes calldata /* performData */) external override {
-        milestonesReached+=1;
+    function performUpkeep(bytes calldata ) external override {
+       _reachMilestone();
     }
 
     function _failBotCheck(address _botAddress) internal {
         require(referralTier[_botAddress]==0,"Already in network");
         emit BotCheckFailed(_botAddress);
+    }
+
+
+    function getReferred(address sender) public view returns (address[] memory){
+      return referrals[sender];
+    }
+
+    function isInCampaign(address user) public view returns (bool) {
+        return referralTier[user] > 0;
+    }
+
+    function getRewards()external view returns(uint256){
+        return _getRewards();
+    }
+
+    function _getRewards() internal view returns(uint256){
+        uint256 _tier=referralTier[msg.sender];
+        uint256 _claimedMilestones=claimedMilestones[msg.sender];
+        uint256 _rewards=0;
+        if(milestonesReached>_claimedMilestones) for(uint i=_claimedMilestones+1;i<=milestonesReached;i++) if(_rewards>0) _rewards+=_tierToRewards(i,_tier);
+        return _rewards;
+    }
+
+    function _tierToRewards(uint256 milestone,uint256 tier) internal view returns(uint256){
+        uint256 _milestoneReward=milestoneRewards[milestone];
+        if(tier<3) return _milestoneReward*(11-tier)/100;
+        else if(tier<10) return _milestoneReward*(10-tier)/100;
+        else return _milestoneReward*(5**(tier-9))/(10*(tier-8));
+    }
+
+    function _getNextMilestoneRewards() internal view returns(uint256){
+        return milestoneTotalSupply*rewardPercentPerMilestone/100;
     }
 }
