@@ -25,20 +25,8 @@ contract HyperclusterFactory {
     event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
 
-    // First create Safe
-    // Then create campaign
-    // Initialize Safe with campaign address
-    // Emit event
-
-  // function createCampaign(ICampaign.CreateCampaignParams memory params) public payable returns(address)  {
-
   function createCampaign(
-    address rewardTokenAddress,
-    address rootReferral,
-    uint256 rewardPercentPerMilestone,
-    uint256 totalSupply,
-    uint256 startIn,
-    uint256 endIn) public returns(address)
+    Create) public returns(address)
   {
     // ISafe safe=ISafe(_deployProxy(safeImplementation, nonce));
     ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
