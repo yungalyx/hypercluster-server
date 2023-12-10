@@ -9,12 +9,20 @@ import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/Confir
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0_0/libraries/FunctionsRequest.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 import "../interface/ICampaign.sol";
 
 contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationCompatibleInterface {
+    using Strings for uint256;
+    using FunctionsRequest for FunctionsRequest.Request;
+    
+    struct Referral{
+        address sender;
+        address receiver;
+    }
 
     string public name;
     string public metadata;
@@ -26,6 +34,8 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
 
     mapping(address=>address[]) public referrals;
     mapping(address=>uint256)public referralTier;
+
+    mapping(bytes32=>Referral) public requestIdsToReferrals;
 
     IERC20 public rewardToken;
     address public rootReferral;
@@ -45,8 +55,13 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     address public constant functionsRouter=0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
     bytes32 public constant donId=0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
     uint64 public constant sourceChainSelector=16015286601757825753;
+    uint64 public constant subscriptionId=1828;
+    uint64 public constant functionsCallbackGasLimit=300000;
+    string public validationSourceCode;
 
-    constructor()  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {}
+    constructor(string memory _validationSourceCode)  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {
+        validationSourceCode=_validationSourceCode;
+    }
 
     function initialize(CreateCampaignParams memory params,uint256 _upKeepId,address _creator) public returns(bool){
         name=params.name;
@@ -70,21 +85,40 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     }
 
 
-
     event ReferralAdded(address sender, address referral);
     event RewardsClaimed(address claimer,uint amount,uint64 destinationSelector);
     event MilestoneReached(uint256 milestone);
     event BotCheckFailed(address botAddress);
 
-    function addReferral(address sender)public{
+    function addReferral(address sender,string memory referralCode, uint8 slotId,uint64 version)public{
         require(sender != msg.sender, "Can't refer yourself");
         require(referralTier[msg.sender]==0,"Already in network");
         require(referrals[sender].length < 2, "Maximum referrals"); 
-        referrals[sender].push(msg.sender);
-        referralTier[msg.sender]=referralTier[sender]+1;
-        emit ReferralAdded(sender,msg.sender);
+        string[] memory args=new string[](2);
+        args[0]=referralCode;
+        args[1]=Strings.toHexString(uint256(uint160(sender)), 20);
+        args[2]=Strings.toHexString(uint256(uint160(msg.sender)), 20);
+        FunctionsRequest.Request memory req;
+        req.initializeRequestForInlineJavaScript(validationSourceCode);
+        if (version > 0) req.addDONHostedSecrets(slotId,version);
+        req.setArgs(args);
+        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(sender,msg.sender);    
     }
 
+    function fulfillRequest(
+        bytes32 requestId,
+        bytes memory response,
+        bytes memory err
+    ) internal override {
+
+        if(response.length>0)
+        {
+            Referral memory referral=requestIdsToReferrals[requestId];
+            referrals[referral.sender].push(referral.receiver);
+            referralTier[referral.receiver]=referralTier[referral.sender]+1;
+            emit ReferralAdded(referral.sender,referral.receiver);
+        }
+    }
 
     function claimRewards(address destinationAddress,uint64 destinationSelector)public{
         uint rewards=_getRewards();
@@ -165,13 +199,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         return true;
     }
 
-    function fulfillRequest(
-        bytes32 requestId,
-        bytes memory response,
-        bytes memory err
-    ) internal override {
-        
-    }
+
 
     function _getPrice() internal view returns (int) {
         (,int answer,,,) = dataFeed.latestRoundData();

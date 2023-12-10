@@ -1,54 +1,100 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity >= 0.8.0;
+// SPDX-License-Identifier: MIT
+pragma solidity >= 0.8.0;
 
-// import "../contracts/HyperclusterCampaign.sol";
+import "@openzeppelin/contracts/utils/Create2.sol";
+import "../StructLib.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
+import "../interface/AutomationRegistrarInterface.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../interface/ICampaign.sol";
 
-// contract HyperclusterFactory {
+contract HyperclusterFactory {
 
-//   address[] public campaigns; 
-//   address private functionRouter;
+    uint256 public nonce;
+    mapping(address=>bool) public campaigns;
+    address public campaignImplementation;
+    address public safeImplementation;
+    address public admin;
+    mapping(address=> address[]) private myCampaigns;
 
-//   uint64 public sourceChainSelector ;
-//   address public immutable i_link;
-//   address public router;
+    address public constant CCIP_BNM_TOKEN_ADDRESS=address(0);
+    LinkTokenInterface public constant LINK_TOKEN=LinkTokenInterface(address(0));
+    AutomationRegistrarInterface public constant UPKEEP_REGISTRAR=AutomationRegistrarInterface(address(0));
 
-//   mapping(address => bool) public isCampaign;
+    constructor(address _campaignImplementation)
+    {
+      campaignImplementation = _campaignImplementation;
+      admin = msg.sender;
+      nonce = 0;
+    }
 
-//   event CampaignCreated(address campaign_address, address creator);
+    event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
-//   constructor(address _functionRouter) public {
-//     functionRouter = _functionRouter;
-//   }
+  function createCampaign(CreateCampaignParams memory params,uint96 upkeepSubscriptionBalance) public returns(address)
+  {
+    require(IERC20(CCIP_BNM_TOKEN_ADDRESS).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
+    ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
 
-//   // function createCampaign(string calldata name, address reward_token, address _datafeed) public payable returns(address)  {
-//   constructor(uint64 _sourceChainSelector, address _link,address _router)
-//   {
-//     sourceChainSelector = _sourceChainSelector;
-//     i_link = _link;
-//     router=_router;
-//   }
+    RegistrationParams memory upkeepRegistrationParams=RegistrationParams(params.name,"",address(campaign),500000,msg.sender,0,"","","",upkeepSubscriptionBalance);
+
+    uint256 _upKeepId=_registerAndPredictID(upkeepRegistrationParams);
+    campaign.initialize(params,_upKeepId,msg.sender);
+
+    emit CampaignCreated(
+      address(campaign),
+      params.rewardTokenAddress,
+      params.rootReferral,
+      params.rewardPercentPerMilestone,
+      params.totalSupply,
+      block.timestamp+params.startIn,
+      block.timestamp+params.endIn);
+
+    
+    campaigns[address(campaign)]=true;
+    nonce++;
+    return address(campaign);
+  }
+
+  function _deployProxy(
+        address implementation,
+        uint salt
+    ) internal returns (address _contractAddress) {
+        bytes memory code = _creationCode(implementation, salt);
+        _contractAddress = Create2.computeAddress(
+            bytes32(salt),
+            keccak256(code)
+        );
+        if (_contractAddress.code.length != 0) return _contractAddress;
+
+        _contractAddress = Create2.deploy(0, bytes32(salt), code);
+    }
+
+    function _creationCode(
+        address implementation_,
+        uint256 salt_
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodePacked(
+                hex"3d60ad80600a3d3981f3363d3d373d3d3d363d73",
+                implementation_,
+                hex"5af43d82803e903d91602b57fd5bf3",
+                abi.encode(salt_)
+            );
+    }
 
 
-//   function createCampaign(string calldata name, address reward_token, address datafeed_address) public payable returns(address)  {
-//     // find price of erc20 token, set that in campaign
+  function campaignExists(address campaign) public view returns(bool){
+    return campaigns[campaign];
+  }
 
-//     bytes32 _salt = keccak256(abi.encodePacked(name, reward_token, tx.origin, _datafeed, functionRouter));
+  function getMyCampaigns() public view returns (address[] memory) {
+    return myCampaigns[msg.sender];
+  }
 
-//     address c = address(new HyperclusterCampaign{salt: _salt}(name, reward_token, tx.origin, _datafeed, functionRouter));
-//     address c = address(new HyperclusterCampaign{salt: _salt}(name, reward_token, tx.origin, datafeed_address,  sourceChainSelector,  i_link,router));
-
-//     // HyperclusterCampaign c = new HyperclusterCampaign(name, reward_token, tx.origin, datafeed_address);
-//     campaigns.push(c);
-//     emit CampaignCreated(c, tx.origin);
-//     return address(c);
-//   }
-
-//   function getCampaigns() public view returns (address[] memory) {
-//     return campaigns;
-//   }
-
-
-//   function campaignExists(address campaign) public view returns(bool){
-//     return isCampaign[campaign];
-//   }
-// }
+  function _registerAndPredictID(RegistrationParams memory params) internal  returns(uint256 upkeepID){
+    require(LINK_TOKEN.balanceOf(address(this))>params.amount,"Insufficient LINK to create upKeep");
+    LINK_TOKEN.approve(address(UPKEEP_REGISTRAR), params.amount);
+    upkeepID = UPKEEP_REGISTRAR.registerUpkeep(params);
+    if(upkeepID ==0) revert("auto-approve disabled");
+  }
+}
