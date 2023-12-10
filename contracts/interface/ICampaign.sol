@@ -5,5 +5,5 @@ import "../StructLib.sol";
 
 interface ICampaign{
 
-    function initialize(CreateCampaignParams memory params) external returns(bool);
+    function initialize(CreateCampaignParams memory params,uint256 _upKeepId,address creator) external returns(bool);
 }
