@@ -2,8 +2,6 @@
 pragma solidity >= 0.8.0;
 
 
-
-
 interface ICampaign{
     struct CreateCampaignParams{
         address rewardTokenAddress;
@@ -14,7 +12,5 @@ interface ICampaign{
         uint256 endIn;
         string metadata;
     }
-
-
-    function initialize(CreateCampaignParams memory params,address safeAddress) external returns(bool);
+    function initialize(CreateCampaignParams memory params) external returns(bool);
 }

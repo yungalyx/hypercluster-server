@@ -1,40 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-
 import "../interface/ICampaign.sol";
 
 // chainlink Functions 0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0
 
 
-contract Hypercluster is ICampaign{
-
-    address public rewardTokenAddress;
-    address public rootReferral;
-    uint256 public totalSupply;
-    uint256 public milestoneTotalSupply;
-    uint256 public rewardPercentPerMilestone;
-    uint256 public startTimestamp;
-    uint256 public endTimestamp;
-    string public metadata;
-    address public safeAddress;
+contract Hypercluster is ICampaign {
 
 
     uint256 public milestonesReached;
     mapping(address=>uint256)public claimedMilestones;
     mapping(uint256=>uint256) public milestoneRewards;
 
-    mapping(address=>address[2]) public referrals;
+    mapping(address=>address[]) public referrals;
     mapping(address=>uint256)public referralTier;
 
     constructor()
     {
         milestonesReached = 0;
-
     }
 
 
-    function initialize(CreateCampaignParams memory params,address _safeAddress) public returns(bool){
+    function initialize(CreateCampaignParams memory params) public returns(bool){
         rewardTokenAddress = params.rewardTokenAddress;
         rootReferral = params.rootReferral;
         totalSupply = params.totalSupply;
@@ -54,13 +42,21 @@ contract Hypercluster is ICampaign{
     event MilestoneReached(uint256 milestone);
     event BotCheckFailed(address botAddress);
 
-
     function addReferral(address sender)public{
+        require(sender != msg.sender, "Can't refer yourself");
         require(referralTier[msg.sender]==0,"Already in network");
-        require(referrals[sender].length<2,"Maximum referrals");
-        referrals[sender][referrals[sender].length]=msg.sender;
+        require(referrals[sender].length < 2, "Maximum referrals"); 
+        referrals[sender].push(msg.sender);
         referralTier[msg.sender]=referralTier[sender]+1;
         emit ReferralAdded(sender,msg.sender);
+    }
+
+    function getReferred(address sender) public view returns (address[] memory){
+      return referrals[sender];
+    }
+
+    function isInCampaign(address user) public view returns (bool) {
+        return referralTier[user] > 0;
     }
 
     function claimRewards(uint64 destinationSelector)public{

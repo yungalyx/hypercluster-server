@@ -12,12 +12,12 @@ task("deploy-hypercluster", "Deploys the Hypercluster contract")
     const hypercluster = await hyperclusterFactory.deploy()
 
     console.log(
-      `\nWaiting ${networks[network.name].confirmations} blocks for transaction ${
+      `\nWaiting blocks for transaction ${
         hypercluster.deployTransaction.hash
       } to be confirmed...`
     )
 
-    await hypercluster.deployTransaction.wait(networks[network.name].confirmations)
+    await hypercluster.deployTransaction.wait(networks[network.name])
 
     console.log("\nDeployed Hypercluster contract to:", hypercluster.address)
 
