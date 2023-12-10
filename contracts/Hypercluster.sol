@@ -13,17 +13,17 @@ import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-import "../interface/ICampaign.sol";
+import "./interface/ICampaign.sol";
 
 contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationCompatibleInterface {
     using Strings for uint256;
     using FunctionsRequest for FunctionsRequest.Request;
-    
-    struct Referral{
-        address sender;
-        address receiver;
-    }
 
+    struct Referral{
+        address receiver;
+        string referralCode;
+    }
+    
     string public name;
     string public metadata;
     address public creator;
@@ -34,6 +34,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
 
     mapping(address=>address[]) public referrals;
     mapping(address=>uint256)public referralTier;
+    mapping(string=>uint256) public referralCodeToReferredCount;
 
     mapping(bytes32=>Referral) public requestIdsToReferrals;
 
@@ -56,7 +57,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     bytes32 public constant donId=0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
     uint64 public constant sourceChainSelector=16015286601757825753;
     uint64 public constant subscriptionId=1828;
-    uint64 public constant functionsCallbackGasLimit=300000;
+    uint32 public constant functionsCallbackGasLimit=300000;
     string public validationSourceCode;
 
     constructor(string memory _validationSourceCode)  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {
@@ -90,19 +91,18 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     event MilestoneReached(uint256 milestone);
     event BotCheckFailed(address botAddress);
 
-    function addReferral(address sender,string memory referralCode, uint8 slotId,uint64 version)public{
-        require(sender != msg.sender, "Can't refer yourself");
+    function addReferral(string memory referralCode, uint8 slotId,uint64 version)public{
         require(referralTier[msg.sender]==0,"Already in network");
-        require(referrals[sender].length < 2, "Maximum referrals"); 
+        require(referralCodeToReferredCount[referralCode]<2,"Maximum referrals");
+        referralCodeToReferredCount[referralCode]+=1;
         string[] memory args=new string[](2);
         args[0]=referralCode;
-        args[1]=Strings.toHexString(uint256(uint160(sender)), 20);
-        args[2]=Strings.toHexString(uint256(uint160(msg.sender)), 20);
+        args[1]=Strings.toHexString(uint256(uint160(msg.sender)), 20);
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(validationSourceCode);
         if (version > 0) req.addDONHostedSecrets(slotId,version);
         req.setArgs(args);
-        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(sender,msg.sender);    
+        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(msg.sender,referralCode);    
     }
 
     function fulfillRequest(
@@ -110,13 +110,24 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         bytes memory response,
         bytes memory err
     ) internal override {
+        Referral memory referral=requestIdsToReferrals[requestId];
 
         if(response.length>0)
         {
-            Referral memory referral=requestIdsToReferrals[requestId];
-            referrals[referral.sender].push(referral.receiver);
-            referralTier[referral.receiver]=referralTier[referral.sender]+1;
-            emit ReferralAdded(referral.sender,referral.receiver);
+            string memory referrerAddressString=string(response);
+            address referrerAddress=address(bytes20(bytes(referrerAddressString)));
+            if(referrerAddress==referral.receiver)
+            {
+                referralCodeToReferredCount[referral.referralCode]-=1;
+            }else{
+                referrals[referrerAddress].push(referral.receiver);
+                referralTier[referral.receiver]=referralTier[referrerAddress]+1;
+                emit ReferralAdded(referrerAddress,referral.receiver);
+            }
+        }else{
+            string memory errString=string(err);
+            if(keccak256(abi.encodePacked(errString))==keccak256(abi.encodePacked("BOT"))) emit BotCheckFailed(requestIdsToReferrals[requestId].receiver);
+            referralCodeToReferredCount[referral.referralCode]-=1;
         }
     }
 
