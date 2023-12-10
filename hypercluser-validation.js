@@ -30,6 +30,9 @@ try {
   const res = await Functions.makeHttpRequest({
     url: `https://hypercluster-frontend.vercel.app/api/resolve?ref=${referral_code}`,
     method: "GET",
+    headers: {
+      "API-KEY": secerts.hyperclusterKey,
+    },
   })
 
   const referrer = res.data.referrer
