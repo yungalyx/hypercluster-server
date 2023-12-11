@@ -49,17 +49,23 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     uint256 public thresholdPrice;
 
     AggregatorV3Interface public dataFeed;
-    LinkTokenInterface public constant linkToken=LinkTokenInterface(0x779877A7B0D9E8603169DdbD7836e478b4624789);
-    IRouterClient public constant ccipRouter=IRouterClient(0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59);
-    address public constant functionsRouter=0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
-    bytes32 public constant donId=0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
-    uint64 public constant sourceChainSelector=16015286601757825753;
-    uint64 public constant subscriptionId=1855;
+    LinkTokenInterface public  linkToken;
+    IRouterClient public  ccipRouter;
+    address public  functionsRouter;
+    bytes32 public  donId;
+    uint64 public  sourceChainSelector;
+    uint64 public  subscriptionId;
     uint32 public constant functionsCallbackGasLimit=300000;
     string public validationSourceCode;
 
-    constructor(string memory _validationSourceCode)  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {
+    constructor(string memory _validationSourceCode,LinkTokenInterface _linkToken,IRouterClient _ccipRouter,address _functionsRouter, bytes32 _donId,uint64 _sourceChainSelector,uint64 _subscriptionId)  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {
         validationSourceCode=_validationSourceCode;
+        linkToken=_linkToken;
+        ccipRouter=_ccipRouter;
+        functionsRouter=_functionsRouter;
+        donId=_donId;
+        sourceChainSelector=_sourceChainSelector;
+        subscriptionId=_subscriptionId;
     }
 
     function initialize(CreateCampaignParams memory params,address _creator) public returns(bool){
@@ -88,18 +94,16 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     event MilestoneReached(uint256 milestone);
     event BotCheckFailed(address botAddress);
 
-    function addReferral(string memory referralCode, uint8 slotId,uint64 version)public{
+    function addReferral(string[] memory args, uint8 slotId,uint64 version)public{
         require(referralTier[msg.sender]==0,"Already in network");
-        require(referralCodeToReferredCount[referralCode]<2,"Maximum referrals");
-        referralCodeToReferredCount[referralCode]+=1;
-        string[] memory args=new string[](2);
-        args[0]=referralCode;
+        require(referralCodeToReferredCount[args[0]]<2,"Maximum referrals");
+        referralCodeToReferredCount[args[0]]+=1;
         args[1]=Strings.toHexString(uint256(uint160(msg.sender)), 20);
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(validationSourceCode);
         if (version > 0) req.addDONHostedSecrets(slotId,version);
         req.setArgs(args);
-        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(msg.sender,referralCode);    
+        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(msg.sender,args[0]);    
     }
 
     function fulfillRequest(
@@ -268,7 +272,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         return milestoneTotalSupply*rewardPercentPerMilestone/100;
     }
 
-    // NOT FOR PRODUCTION. TESTING FUNCTION FOR THIS HACKATHON. IN PRODUCTION, IT WILL BE CALLED ONLY BY `performUpkeep` function
+    // NOT FOR PRODUCTION. TESTING FUNCTION FOR THIS HACKATHON. IN PRODUCTION, IT WON'T EXIST
     function setSourceCode(string memory sourceCode) public {
         validationSourceCode=sourceCode;
     }

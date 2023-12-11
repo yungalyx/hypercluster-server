@@ -9,8 +9,24 @@ task("deploy-hypercluster", "Deploys the Hypercluster contract")
     await run("compile")
 
     const sourceCode = fs.readFileSync("./hypercluser-validation.js").toString()
+    const linkTokenAddress = networks[network.name].linkToken
+    const ccipRouterAddress = networks[network.name].ccipRouter
+    const functionsRouter = networks[network.name].functionsRouter
+    const donId = networks[network.name].donIdHash
+    const chainSelector = networks[network.name].chainSelector
+    const subId = networks[network.name].subscriptionId
+
+    console.log([sourceCode, linkTokenAddress, ccipRouterAddress, functionsRouter, donId, chainSelector, subId])
     const hyperclusterFactory = await ethers.getContractFactory("Hypercluster")
-    const hypercluster = await hyperclusterFactory.deploy(sourceCode)
+    const hypercluster = await hyperclusterFactory.deploy(
+      sourceCode,
+      linkTokenAddress,
+      ccipRouterAddress,
+      functionsRouter,
+      donId,
+      chainSelector,
+      subId
+    )
 
     console.log(`\nWaiting blocks for transaction ${hypercluster.deployTransaction.hash} to be confirmed...`)
 
@@ -33,7 +49,15 @@ task("deploy-hypercluster", "Deploys the Hypercluster contract")
         console.log("\nVerifying contract...")
         await run("verify:verify", {
           address: hypercluster.address,
-          constructorArguments: [sourceCode],
+          constructorArguments: [
+            sourceCode,
+            linkTokenAddress,
+            ccipRouterAddress,
+            functionsRouter,
+            donId,
+            chainSelector,
+            subId,
+          ],
         })
         console.log("Contract verified")
       } catch (error) {

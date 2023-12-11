@@ -27,10 +27,14 @@ const networks = {
     confirmations: DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS,
     nativeCurrencySymbol: "AVAX",
     linkToken: "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
+    ccipRouter: "0xf694e193200268f9a4868e4aa017a0118c9a8177",
+    chainSelector: "14767482510784806043",
     linkWrapper: "0x9345AC54dA4D0B5Cda8CB749d8ef37e5F02BBb21",
     linkPriceFeed: "0x79c91fd4F8b3DaBEe17d286EB11cEE4D83521775", // LINK/AVAX
     functionsRouter: "0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0",
     donId: "fun-avalanche-fuji-1",
+    donIdHash: "0x66756e2d6176616c616e6368652d66756a692d31000000000000000000000000",
+    subscriptionId: "1898",
     gatewayUrls: [
       "https://01.functions-gateway.testnet.chain.link/",
       "https://02.functions-gateway.testnet.chain.link/",
