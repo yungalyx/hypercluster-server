@@ -17,9 +17,9 @@ contract HyperclusterFactory {
     address public admin;
     mapping(address=> address[]) private myCampaigns;
 
-    address public constant CCIP_BNM_TOKEN_ADDRESS=address(0);
-    LinkTokenInterface public constant LINK_TOKEN=LinkTokenInterface(address(0));
-    AutomationRegistrarInterface public constant UPKEEP_REGISTRAR=AutomationRegistrarInterface(address(0));
+    address public constant CCIP_BNM_TOKEN_ADDRESS=0xFd57b4ddBf88a4e07fF4e34C487b99af2Fe82a05;
+    LinkTokenInterface public constant LINK_TOKEN=LinkTokenInterface(0x779877A7B0D9E8603169DdbD7836e478b4624789);
+    AutomationRegistrarInterface public constant UPKEEP_REGISTRAR=AutomationRegistrarInterface(0xb0E49c5D0d05cbc241d68c05BC5BA1d1B7B72976);
 
     constructor(address _campaignImplementation)
     {
@@ -30,15 +30,12 @@ contract HyperclusterFactory {
 
     event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
-  function createCampaign(CreateCampaignParams memory params,uint96 upkeepSubscriptionBalance) public returns(address)
+  function createCampaign(CreateCampaignParams memory params) public returns(address)
   {
     require(IERC20(CCIP_BNM_TOKEN_ADDRESS).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
     ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
 
-    RegistrationParams memory upkeepRegistrationParams=RegistrationParams(params.name,"",address(campaign),500000,msg.sender,0,"","","",upkeepSubscriptionBalance);
-
-    uint256 _upKeepId=_registerAndPredictID(upkeepRegistrationParams);
-    campaign.initialize(params,_upKeepId,msg.sender);
+    campaign.initialize(params,msg.sender);
 
     emit CampaignCreated(
       address(campaign),
@@ -91,10 +88,4 @@ contract HyperclusterFactory {
     return myCampaigns[msg.sender];
   }
 
-  function _registerAndPredictID(RegistrationParams memory params) internal  returns(uint256 upkeepID){
-    require(LINK_TOKEN.balanceOf(address(this))>params.amount,"Insufficient LINK to create upKeep");
-    LINK_TOKEN.approve(address(UPKEEP_REGISTRAR), params.amount);
-    upkeepID = UPKEEP_REGISTRAR.registerUpkeep(params);
-    if(upkeepID ==0) revert("auto-approve disabled");
-  }
 }

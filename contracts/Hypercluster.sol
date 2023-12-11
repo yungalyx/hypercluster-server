@@ -48,15 +48,13 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     uint256 public increaseRate;
     uint256 public thresholdPrice;
 
-    uint256 public customLogicUpkeepId;
-
     AggregatorV3Interface public dataFeed;
     LinkTokenInterface public constant linkToken=LinkTokenInterface(0x779877A7B0D9E8603169DdbD7836e478b4624789);
     IRouterClient public constant ccipRouter=IRouterClient(0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59);
     address public constant functionsRouter=0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
     bytes32 public constant donId=0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
     uint64 public constant sourceChainSelector=16015286601757825753;
-    uint64 public constant subscriptionId=1828;
+    uint64 public constant subscriptionId=1855;
     uint32 public constant functionsCallbackGasLimit=300000;
     string public validationSourceCode;
 
@@ -64,7 +62,7 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         validationSourceCode=_validationSourceCode;
     }
 
-    function initialize(CreateCampaignParams memory params,uint256 _upKeepId,address _creator) public returns(bool){
+    function initialize(CreateCampaignParams memory params,address _creator) public returns(bool){
         name=params.name;
         metadata = params.metadata;
         rewardToken = IERC20(params.rewardTokenAddress);
@@ -78,7 +76,6 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         rewardPercentPerMilestone = params.rewardPercentPerMilestone;
         
         referralTier[rootReferral]=1;
-        customLogicUpkeepId=_upKeepId;
         dataFeed=AggregatorV3Interface(params.dataFeedAddress);
         
         thresholdPrice = (uint256(_getPrice()) * increaseRate) / 1e4;
@@ -269,5 +266,10 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
 
     function _getNextMilestoneRewards() internal view returns(uint256){
         return milestoneTotalSupply*rewardPercentPerMilestone/100;
+    }
+
+    // NOT FOR PRODUCTION. TESTING FUNCTION FOR THIS HACKATHON. IN PRODUCTION, IT WILL BE CALLED ONLY BY `performUpkeep` function
+    function setSourceCode(string memory sourceCode) public {
+        validationSourceCode=sourceCode;
     }
 }

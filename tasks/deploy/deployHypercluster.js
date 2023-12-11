@@ -1,5 +1,5 @@
 const { networks } = require("../../networks")
-
+const fs = require("fs")
 task("deploy-hypercluster", "Deploys the Hypercluster contract")
   .addOptionalParam("verify", "Set to true to verify contract", false, types.boolean)
   .setAction(async (taskArgs) => {
@@ -8,14 +8,11 @@ task("deploy-hypercluster", "Deploys the Hypercluster contract")
     console.log("\n__Compiling Contracts__")
     await run("compile")
 
+    const sourceCode = fs.readFileSync("./hypercluser-validation.js").toString()
     const hyperclusterFactory = await ethers.getContractFactory("Hypercluster")
-    const hypercluster = await hyperclusterFactory.deploy()
+    const hypercluster = await hyperclusterFactory.deploy(sourceCode)
 
-    console.log(
-      `\nWaiting blocks for transaction ${
-        hypercluster.deployTransaction.hash
-      } to be confirmed...`
-    )
+    console.log(`\nWaiting blocks for transaction ${hypercluster.deployTransaction.hash} to be confirmed...`)
 
     await hypercluster.deployTransaction.wait(networks[network.name])
 
@@ -36,7 +33,7 @@ task("deploy-hypercluster", "Deploys the Hypercluster contract")
         console.log("\nVerifying contract...")
         await run("verify:verify", {
           address: hypercluster.address,
-          constructorArguments: [],
+          constructorArguments: [sourceCode],
         })
         console.log("Contract verified")
       } catch (error) {
