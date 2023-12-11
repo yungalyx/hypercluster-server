@@ -30,30 +30,46 @@ contract HyperclusterFactory {
 
     event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
-  function createCampaign(CreateCampaignParams memory params,uint96 upkeepSubscriptionBalance) public returns(address)
-  {
-    require(IERC20(CCIP_BNM_TOKEN_ADDRESS).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
-    ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
+    function createCampaign(CreateCampaignParams memory params,uint96 upkeepSubscriptionBalance) public returns(address)
+    {
+      // require(IERC20(CCIP_BNM_TOKEN_ADDRESS).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
 
-    RegistrationParams memory upkeepRegistrationParams=RegistrationParams(params.name,"",address(campaign),500000,msg.sender,0,"","","",upkeepSubscriptionBalance);
+      ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
 
-    uint256 _upKeepId=_registerAndPredictID(upkeepRegistrationParams);
-    campaign.initialize(params,_upKeepId,msg.sender);
 
-    emit CampaignCreated(
-      address(campaign),
-      params.rewardTokenAddress,
-      params.rootReferral,
-      params.rewardPercentPerMilestone,
-      params.totalSupply,
-      block.timestamp+params.startIn,
-      block.timestamp+params.endIn);
+      RegistrationParams memory upkeepRegistrationParams=RegistrationParams(params.name,"",address(campaign),500000,msg.sender,0,"","","",upkeepSubscriptionBalance);
 
+      uint256 _upKeepId=_registerAndPredictID(upkeepRegistrationParams);
+      campaign.initialize(params,_upKeepId,msg.sender);
+
+      emit CampaignCreated(
+        address(campaign),
+        params.rewardTokenAddress,
+        params.rootReferral,
+        params.rewardPercentPerMilestone,
+        params.totalSupply,
+        block.timestamp+params.startIn,
+        block.timestamp+params.endIn);
+
+      myCampaigns[msg.sender].push(address(campaign));
+      
+      campaigns[address(campaign)]=true;
+      nonce++;
+      return address(campaign);
+    }
+
+    // function createCampaign(CreateCampaignParams memory params,uint96 upkeepSubscriptionBalance) public returns(address)
+    // {
     
-    campaigns[address(campaign)]=true;
-    nonce++;
-    return address(campaign);
-  }
+    //   emit CampaignCreated(
+    //     address(0x0),
+    //     params.rewardTokenAddress,
+    //     params.rootReferral,
+    //     params.rewardPercentPerMilestone,
+    //     params.totalSupply,
+    //     block.timestamp+params.startIn,
+    //     block.timestamp+params.endIn);
+    // }
 
   function _deployProxy(
         address implementation,
