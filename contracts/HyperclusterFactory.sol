@@ -17,22 +17,21 @@ contract HyperclusterFactory {
     address public admin;
     mapping(address=> address[]) private myCampaigns;
 
-    address public constant CCIP_BNM_TOKEN_ADDRESS=0xFd57b4ddBf88a4e07fF4e34C487b99af2Fe82a05;
-    LinkTokenInterface public constant LINK_TOKEN=LinkTokenInterface(0x779877A7B0D9E8603169DdbD7836e478b4624789);
-    AutomationRegistrarInterface public constant UPKEEP_REGISTRAR=AutomationRegistrarInterface(0xb0E49c5D0d05cbc241d68c05BC5BA1d1B7B72976);
+    LinkTokenInterface public  linkToken;
 
-    constructor(address _campaignImplementation)
+    constructor(address _campaignImplementation,LinkTokenInterface _linkToken)
     {
       campaignImplementation = _campaignImplementation;
       admin = msg.sender;
       nonce = 0;
+      linkToken = _linkToken;
     }
 
     event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
   function createCampaign(CreateCampaignParams memory params) public returns(address)
   {
-    require(IERC20(CCIP_BNM_TOKEN_ADDRESS).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
+    require(IERC20(params.rewardTokenAddress).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
     ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
 
     campaign.initialize(params,msg.sender);
@@ -53,18 +52,6 @@ contract HyperclusterFactory {
       return address(campaign);
     }
 
-    // function createCampaign(CreateCampaignParams memory params,uint96 upkeepSubscriptionBalance) public returns(address)
-    // {
-    
-    //   emit CampaignCreated(
-    //     address(0x0),
-    //     params.rewardTokenAddress,
-    //     params.rootReferral,
-    //     params.rewardPercentPerMilestone,
-    //     params.totalSupply,
-    //     block.timestamp+params.startIn,
-    //     block.timestamp+params.endIn);
-    // }
 
   function _deployProxy(
         address implementation,

@@ -9,8 +9,9 @@ task("deploy-factory", "Deploys the HyperclusterFactory contract")
     await run("compile")
 
     const hyperclusterImplementation = "0xb1515f97f08046Cf041d978068f66986Ab750FBC"
+    const linkToken = networks[network.name].linkToken
     const hyperclusterFactory = await ethers.getContractFactory("HyperclusterFactory")
-    const hypercluster = await hyperclusterFactory.deploy(hyperclusterImplementation)
+    const hypercluster = await hyperclusterFactory.deploy(hyperclusterImplementation, linkToken)
 
     console.log(
       `\nWaiting ${networks[network.name].confirmations} blocks for transaction ${
@@ -37,7 +38,7 @@ task("deploy-factory", "Deploys the HyperclusterFactory contract")
         console.log("\nVerifying contract...")
         await run("verify:verify", {
           address: hypercluster.address,
-          constructorArguments: [hyperclusterImplementation],
+          constructorArguments: [hyperclusterImplementation, linkToken],
         })
         console.log("Contract verified")
       } catch (error) {

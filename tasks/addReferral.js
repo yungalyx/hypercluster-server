@@ -14,12 +14,30 @@ task("add-referral", "Adds a referral to the network").setAction(async (taskArgs
   //   console.log(error)
   // }
 
-  const functionHash = ethers.utils.id("_generateZexCraftNft(uint256)").slice(0, 10)
+  const functionHash = ethers.utils
+    .id("createCampaign((string,string,address,address,uint256,uint256,uint256,uint256,uint256,address))")
+    .slice(0, 10)
   const encodedDataa = ethers.utils.defaultAbiCoder
-      .encode(["uint256"], [0])
-      .slice(2)
-    const dataa = functionHash + encodedDataa
-    console.log("\nDATA\n\n" + dataa + "\n\n")
+    .encode(
+      [["string", "string", "address", "address", "uint256", "uint256", "uint256", "uint256", "uint256", "address"]],
+      [
+        [
+          "Gabriel",
+          "testing",
+          "0xD21341536c5cF5EB1bcb58f6723cE26e8D8E90e4",
+          "0x0429A2Da7884CA14E53142988D5845952fE4DF6a",
+          "10",
+          "100000000000000",
+          "10",
+          "0",
+          "1000000",
+          "0x5498BB86BC934c8D34FDA08E81D444153d0D06aD",
+        ],
+      ]
+    )
+    .slice(2)
+  const dataa = functionHash + encodedDataa
+  console.log("\nDATA\n\n" + dataa + "\n\n")
 
   // const sourceCode = fs.readFileSync("./hypercluser-validation.js").toString()
   // const functionHashh = ethers.utils.id("setSourceCode(string)").slice(0, 10)
