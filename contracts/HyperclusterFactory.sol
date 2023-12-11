@@ -1,40 +1,52 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "@openzeppelin/contracts/utils/Create2.sol";
+import "./Hypercluster.sol";
 import "./StructLib.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import "./interface/AutomationRegistrarInterface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./interface/ICampaign.sol";
 
 contract HyperclusterFactory {
 
     uint256 public nonce;
     mapping(address=>bool) public campaigns;
-    address public campaignImplementation;
-    address public safeImplementation;
     address public admin;
     mapping(address=> address[]) private myCampaigns;
 
-    LinkTokenInterface public  linkToken;
 
-    constructor(address _campaignImplementation,LinkTokenInterface _linkToken)
+    LinkTokenInterface public  linkToken;
+    IRouterClient public  ccipRouter;
+    address public  functionsRouter;
+    bytes32 public  donId;
+    uint64 public  sourceChainSelector;
+    uint64 public  subscriptionId;
+    uint32 public constant functionsCallbackGasLimit=300000;
+    string public validationSourceCode;
+
+    constructor(string memory _validationSourceCode,IRouterClient _ccipRouter,address _functionsRouter, bytes32 _donId,uint64 _sourceChainSelector,uint64 _subscriptionId,LinkTokenInterface _linkToken)
     {
-      campaignImplementation = _campaignImplementation;
       admin = msg.sender;
       nonce = 0;
       linkToken = _linkToken;
+      ccipRouter = _ccipRouter;
+      functionsRouter = _functionsRouter;
+      donId = _donId;
+      sourceChainSelector = _sourceChainSelector;
+      subscriptionId = _subscriptionId;
+      validationSourceCode = _validationSourceCode;
     }
 
-    event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
+    
+
+  event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
   function createCampaign(CreateCampaignParams memory params) public returns(address)
   {
     require(IERC20(params.rewardTokenAddress).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
-    ICampaign campaign = ICampaign(_deployProxy(campaignImplementation, nonce));
+    Hypercluster campaign = new Hypercluster(params,msg.sender,validationSourceCode,linkToken,ccipRouter,functionsRouter,donId,sourceChainSelector,subscriptionId);
 
-    campaign.initialize(params,msg.sender);
+    IERC20(params.rewardTokenAddress).transferFrom(msg.sender,address(campaign),params.totalSupply);
 
       emit CampaignCreated(
         address(campaign),
@@ -52,33 +64,6 @@ contract HyperclusterFactory {
       return address(campaign);
     }
 
-
-  function _deployProxy(
-        address implementation,
-        uint salt
-    ) internal returns (address _contractAddress) {
-        bytes memory code = _creationCode(implementation, salt);
-        _contractAddress = Create2.computeAddress(
-            bytes32(salt),
-            keccak256(code)
-        );
-        if (_contractAddress.code.length != 0) return _contractAddress;
-
-        _contractAddress = Create2.deploy(0, bytes32(salt), code);
-    }
-
-    function _creationCode(
-        address implementation_,
-        uint256 salt_
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                hex"3d60ad80600a3d3981f3363d3d373d3d3d363d73",
-                implementation_,
-                hex"5af43d82803e903d91602b57fd5bf3",
-                abi.encode(salt_)
-            );
-    }
 
 
   function campaignExists(address campaign) public view returns(bool){

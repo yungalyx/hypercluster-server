@@ -12,10 +12,10 @@ import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import './StructLib.sol';
+import "./interface/ILogAutomation.sol";
 
-import "./interface/ICampaign.sol";
-
-contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationCompatibleInterface {
+contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleInterface {
     using Strings for uint256;
     using FunctionsRequest for FunctionsRequest.Request;
 
@@ -55,10 +55,10 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     bytes32 public  donId;
     uint64 public  sourceChainSelector;
     uint64 public  subscriptionId;
-    uint32 public constant functionsCallbackGasLimit=300000;
+    uint32 public functionsCallbackGasLimit;
     string public validationSourceCode;
 
-    constructor(string memory _validationSourceCode,LinkTokenInterface _linkToken,IRouterClient _ccipRouter,address _functionsRouter, bytes32 _donId,uint64 _sourceChainSelector,uint64 _subscriptionId)  FunctionsClient(functionsRouter) ConfirmedOwner(msg.sender) {
+    constructor(CreateCampaignParams memory params,address _creator,string memory _validationSourceCode,LinkTokenInterface _linkToken,IRouterClient _ccipRouter,address _functionsRouter, bytes32 _donId,uint64 _sourceChainSelector,uint64 _subscriptionId)  FunctionsClient(_functionsRouter) ConfirmedOwner(msg.sender) {
         validationSourceCode=_validationSourceCode;
         linkToken=_linkToken;
         ccipRouter=_ccipRouter;
@@ -66,9 +66,10 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         donId=_donId;
         sourceChainSelector=_sourceChainSelector;
         subscriptionId=_subscriptionId;
+        _initialize(params,_creator);
     }
 
-    function initialize(CreateCampaignParams memory params,address _creator) public returns(bool){
+    function _initialize(CreateCampaignParams memory params,address _creator) internal returns(bool){
         name=params.name;
         metadata = params.metadata;
         rewardToken = IERC20(params.rewardTokenAddress);
@@ -93,15 +94,35 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
     event RewardsClaimed(address claimer,uint amount,uint64 destinationSelector);
     event MilestoneReached(uint256 milestone);
     event BotCheckFailed(address botAddress);
+    event CannotReferYourself();
+    event FunctionsError(string err);
+    event FunctionsRequestFulfilled(
+        bytes32  requestId,
+        bytes  data,
+        bytes  error
+    );
 
-    function addReferral(string[] memory args, uint8 slotId,uint64 version)public{
+
+    function addReferral(string[] memory args, uint8 slotId,uint64 version, bytes memory encryptedSecretsUrls,bytes[] memory bytesArgs)public{
+        FunctionsRequest.Request memory req;
+        req.initializeRequestForInlineJavaScript(validationSourceCode);
+
         require(referralTier[msg.sender]==0,"Already in network");
         require(referralCodeToReferredCount[args[0]]<2,"Maximum referrals");
         referralCodeToReferredCount[args[0]]+=1;
+        
         args[1]=Strings.toHexString(uint256(uint160(msg.sender)), 20);
-        FunctionsRequest.Request memory req;
-        req.initializeRequestForInlineJavaScript(validationSourceCode);
-        if (version > 0) req.addDONHostedSecrets(slotId,version);
+        if (encryptedSecretsUrls.length > 0)
+            req.addSecretsReference(encryptedSecretsUrls);
+        else if (version > 0) {
+            req.addDONHostedSecrets(
+                slotId,
+                version
+            );
+        }
+
+        if (args.length > 0) req.setArgs(args);
+        if (bytesArgs.length > 0) req.setBytesArgs(bytesArgs);
         req.setArgs(args);
         requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(msg.sender,args[0]);    
     }
@@ -111,26 +132,11 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         bytes memory response,
         bytes memory err
     ) internal override {
-        Referral memory referral=requestIdsToReferrals[requestId];
-
-        if(response.length>0)
-        {
-            string memory referrerAddressString=string(response);
-            address referrerAddress=address(bytes20(bytes(referrerAddressString)));
-            if(referrerAddress==referral.receiver)
-            {
-                referralCodeToReferredCount[referral.referralCode]-=1;
-            }else{
-                referrals[referrerAddress].push(referral.receiver);
-                referralTier[referral.receiver]=referralTier[referrerAddress]+1;
-                emit ReferralAdded(referrerAddress,referral.receiver);
-            }
-        }else{
-            string memory errString=string(err);
-            if(keccak256(abi.encodePacked(errString))==keccak256(abi.encodePacked("BOT"))) emit BotCheckFailed(requestIdsToReferrals[requestId].receiver);
-            referralCodeToReferredCount[referral.referralCode]-=1;
-        }
+        emit FunctionsRequestFulfilled(requestId, response, err);
     }
+
+
+
 
     function claimRewards(address destinationAddress,uint64 destinationSelector)public{
         uint rewards=_getRewards();
@@ -218,6 +224,14 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         return answer;
     } 
 
+    function checkLog(
+        ILogAutomation.Log calldata log,
+        bytes memory
+    ) external pure returns (bool upkeepNeeded, bytes memory performData) {
+        upkeepNeeded = true;
+        performData=log.data;
+    }
+    
 
     function checkUpkeep(
         bytes calldata
@@ -225,14 +239,40 @@ contract Hypercluster is ICampaign, FunctionsClient, ConfirmedOwner, AutomationC
         external
         view
         override
-        returns (bool upkeepNeeded,bytes memory )
+        returns (bool upkeepNeeded,bytes memory performData)
     {
         uint256 currentPrice=uint256(_getPrice());
         upkeepNeeded = currentPrice >= thresholdPrice;
+        performData="";
     }
 
-    function performUpkeep(bytes calldata ) external override {
+    function performUpkeep(bytes calldata performData) external override {
+        if(performData.length==0)
        _reachMilestone();
+       else{
+    (bytes32 requestId,bytes memory response,bytes memory err) = abi.decode(performData,(bytes32,bytes,bytes));
+      Referral memory referral=requestIdsToReferrals[requestId];
+
+        if(response.length>0)
+        {
+            string memory referrerAddressString=string(response);
+            address referrerAddress=address(bytes20(bytes(referrerAddressString)));
+            if(referrerAddress==referral.receiver)
+            {
+                referralCodeToReferredCount[referral.referralCode]-=1;
+                emit CannotReferYourself();
+            }else{
+                referrals[referrerAddress].push(referral.receiver);
+                referralTier[referral.receiver]=referralTier[referrerAddress]+1;
+                emit ReferralAdded(referrerAddress,referral.receiver);
+            }
+        }else{
+            string memory errString=string(err);
+            if(keccak256(err)==keccak256(bytes("BOT"))) emit BotCheckFailed(requestIdsToReferrals[requestId].receiver);
+            else emit FunctionsError(errString);
+            referralCodeToReferredCount[referral.referralCode]-=1;
+        }
+       }
     }
 
     function _failBotCheck(address _botAddress) internal {

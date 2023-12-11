@@ -1,5 +1,4 @@
 const { networks } = require("../../networks")
-const fs = require("fs")
 task("deploy-hypercluster", "Deploys the Hypercluster contract")
   .addOptionalParam("verify", "Set to true to verify contract", false, types.boolean)
   .setAction(async (taskArgs) => {
@@ -8,15 +7,6 @@ task("deploy-hypercluster", "Deploys the Hypercluster contract")
     console.log("\n__Compiling Contracts__")
     await run("compile")
 
-    const sourceCode = fs.readFileSync("./hypercluser-validation.js").toString()
-    const linkTokenAddress = networks[network.name].linkToken
-    const ccipRouterAddress = networks[network.name].ccipRouter
-    const functionsRouter = networks[network.name].functionsRouter
-    const donId = networks[network.name].donIdHash
-    const chainSelector = networks[network.name].chainSelector
-    const subId = networks[network.name].subscriptionId
-
-    console.log([sourceCode, linkTokenAddress, ccipRouterAddress, functionsRouter, donId, chainSelector, subId])
     const hyperclusterFactory = await ethers.getContractFactory("Hypercluster")
     const hypercluster = await hyperclusterFactory.deploy(
       sourceCode,

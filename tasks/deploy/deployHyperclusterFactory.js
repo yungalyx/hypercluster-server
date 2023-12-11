@@ -1,4 +1,5 @@
 const { networks } = require("../../networks")
+const fs = require("fs")
 
 task("deploy-factory", "Deploys the HyperclusterFactory contract")
   .addOptionalParam("verify", "Set to true to verify contract", false, types.boolean)
@@ -8,10 +9,24 @@ task("deploy-factory", "Deploys the HyperclusterFactory contract")
     console.log("\n__Compiling Contracts__")
     await run("compile")
 
-    const hyperclusterImplementation = "0xb1515f97f08046Cf041d978068f66986Ab750FBC"
+    const sourceCode = fs.readFileSync("./hypercluser-validation.js").toString()
     const linkToken = networks[network.name].linkToken
+    const ccipRouterAddress = networks[network.name].ccipRouter
+    const functionsRouter = networks[network.name].functionsRouter
+    const donId = networks[network.name].donIdHash
+    const chainSelector = networks[network.name].chainSelector
+    const subId = networks[network.name].subscriptionId
+
     const hyperclusterFactory = await ethers.getContractFactory("HyperclusterFactory")
-    const hypercluster = await hyperclusterFactory.deploy(hyperclusterImplementation, linkToken)
+    const hypercluster = await hyperclusterFactory.deploy(
+      sourceCode,
+      ccipRouterAddress,
+      functionsRouter,
+      donId,
+      chainSelector,
+      subId,
+      linkToken
+    )
 
     console.log(
       `\nWaiting ${networks[network.name].confirmations} blocks for transaction ${
@@ -38,7 +53,15 @@ task("deploy-factory", "Deploys the HyperclusterFactory contract")
         console.log("\nVerifying contract...")
         await run("verify:verify", {
           address: hypercluster.address,
-          constructorArguments: [hyperclusterImplementation, linkToken],
+          constructorArguments: [
+            sourceCode,
+            ccipRouterAddress,
+            functionsRouter,
+            donId,
+            chainSelector,
+            subId,
+            linkToken,
+          ],
         })
         console.log("Contract verified")
       } catch (error) {
