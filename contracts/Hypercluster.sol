@@ -261,10 +261,10 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
     /// @return success returns true if the milestone is successfully updated
     function _reachMilestone() internal returns(bool){
         milestonesReached++;
-        uint rewards=milestoneTotalSupply*rewardPercentPerMilestone/100;
+        uint256 _rewards=(milestoneTotalSupply*rewardPercentPerMilestone)/100;
         if(rewards==0) return false;
-        milestoneRewards[milestonesReached]=rewards;
-        milestoneTotalSupply-=rewards;
+        milestoneRewards[milestonesReached]=_rewards;
+        milestoneTotalSupply-=_rewards;
         emit MilestoneReached(milestonesReached);
         return true;
     }

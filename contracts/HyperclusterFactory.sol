@@ -1,20 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "./Hypercluster.sol";
-import "./StructLib.sol";
+// Chainlink and Openzeppelin Imports
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
-import "./interface/AutomationRegistrarInterface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+// Interfaces and Libraries
+import "./interface/AutomationRegistrarInterface.sol";
+import "./Hypercluster.sol";
+import "./StructLib.sol";
+
+/// @title HyperclusterFactory - The Web3 Automated Referral System
+/// @author @gabrielantonyxaviour and @yungalyx
+/// @notice Submitted for Chailink Constellation 2023 Hackathon
+/// @dev Powered by Chainlink Functions, Chainlink CCIP, Chainlink Automation and Chainlink Price Feeds
 contract HyperclusterFactory {
 
+    // Public variables
     uint256 public nonce;
-    mapping(address=>bool) public campaigns;
     address public admin;
+    mapping(address=>bool) public campaigns;
     mapping(address=> address[]) private myCampaigns;
 
-
+    // Chainlink Variables
     LinkTokenInterface public  linkToken;
     IRouterClient public  ccipRouter;
     address public  functionsRouter;
@@ -24,6 +32,7 @@ contract HyperclusterFactory {
     uint32 public constant functionsCallbackGasLimit=300000;
     string public validationSourceCode;
 
+    // Constructor
     constructor(string memory _validationSourceCode,IRouterClient _ccipRouter,address _functionsRouter, bytes32 _donId,uint64 _sourceChainSelector,uint64 _subscriptionId,LinkTokenInterface _linkToken)
     {
       admin = msg.sender;
@@ -38,9 +47,13 @@ contract HyperclusterFactory {
     }
 
     
-
+  // Events
   event CampaignCreated(address campaign, address rewardTokenAddress,address rootReferral, uint256 rewardPercentPerMilestone, uint256 tokenAmount,uint256 startTimestamp,uint256 endTimestamp);
 
+   /// @notice Creates a campaign
+    /// @dev Deploys the campaign contract, intializes it and transfers the reward tokens into it
+    /// @param params campaign specific parameters
+    /// @return address returns the address of the deployed campaign contract
   function createCampaign(CreateCampaignParams memory params) public returns(address)
   {
     require(IERC20(params.rewardTokenAddress).allowance(msg.sender,address(this))>params.totalSupply,"Approve Tokens first");
@@ -65,11 +78,12 @@ contract HyperclusterFactory {
     }
 
 
-
+  /// @notice Checks if a campaign exists
   function campaignExists(address campaign) public view returns(bool){
     return campaigns[campaign];
   }
 
+  /// @notice Returns the number of campaigns created by a user
   function getMyCampaigns() public view returns (address[] memory) {
     return myCampaigns[msg.sender];
   }
