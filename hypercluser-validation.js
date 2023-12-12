@@ -20,7 +20,7 @@ try {
   })
 
   if (response1.data.data.totalScore > 75) {
-    throw Error("BOT")
+    return Functions.encodeString("BOT")
   }
 } catch (err) {
   throw Error("API")
@@ -38,5 +38,5 @@ try {
   const referrer = res.data.referrer
   return Functions.encodeString(referrer)
 } catch {
-  throw Error("INVALID")
+  return Functions.encodeString("INVALID")
 }

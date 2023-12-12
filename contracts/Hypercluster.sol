@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
+// Chailink imports
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -10,34 +11,47 @@ import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/dev/v1_0
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
+// Openzeppelin imports
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+
+// Structs and interfaces
 import './StructLib.sol';
 import "./interface/ILogAutomation.sol";
 
+/// @title Hypercluster - The Web3 Automated Referral System
+/// @author @gabrielantonyxaviour and @yungalyx
+/// @notice Submitted for Chailink Constellation 2023 Hackathon
+/// @dev Powered by Chainlink Functions, Chainlink CCIP, Chainlink Automation and Chainlink Price Feeds
+
 contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleInterface {
+    // Libraries
     using Strings for uint256;
     using FunctionsRequest for FunctionsRequest.Request;
 
+    // structs
     struct Referral{
         address receiver;
         string referralCode;
     }
     
+    // Campaign metadata
     string public name;
     string public metadata;
     address public creator;
 
+    // Milestone public variables
     uint256 public milestonesReached;
     mapping(address=>uint256)public claimedMilestones;
     mapping(uint256=>uint256) public milestoneRewards;
 
+    // referral public variables
     mapping(address=>address[]) public referrals;
     mapping(address=>uint256)public referralTier;
     mapping(string=>uint256) public referralCodeToReferredCount;
-
     mapping(bytes32=>Referral) public requestIdsToReferrals;
 
+    // Campaign specific public variables
     IERC20 public rewardToken;
     address public rootReferral;
     uint256 public totalSupply;
@@ -47,7 +61,9 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
     uint256 public rewardPercentPerMilestone;
     uint256 public increaseRate;
     uint256 public thresholdPrice;
+    uint256 public initialPrice;
 
+    // Chainlink public variables
     AggregatorV3Interface public dataFeed;
     LinkTokenInterface public  linkToken;
     IRouterClient public  ccipRouter;
@@ -69,6 +85,24 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         _initialize(params,_creator);
     }
 
+    // Events
+    event ReferralAdded(address sender, address referral);
+    event RewardsClaimed(address claimer,uint amount,uint64 destinationSelector);
+    event MilestoneReached(uint256 milestone);
+    event BotCheckFailed(address botAddress);
+    event CannotReferYourself();
+    event FunctionsError(string err);
+    event FunctionsRequestFulfilled(
+        bytes32  requestId,
+        bytes  data,
+        bytes  error
+    );
+
+    /// @notice Called on initialization of the campaign
+    /// @dev Calculates the threshold price to reach the first milestone of the campaign
+    /// @param params campaign specific parameters
+    /// @param _creator The creator of the campaign
+    /// @return success returns true if the campaign is successfully initialized
     function _initialize(CreateCampaignParams memory params,address _creator) internal returns(bool){
         name=params.name;
         metadata = params.metadata;
@@ -85,24 +119,18 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         referralTier[rootReferral]=1;
         dataFeed=AggregatorV3Interface(params.dataFeedAddress);
         
-        thresholdPrice = (uint256(_getPrice()) * increaseRate) / 1e4;
+        uint256 currentPrice=uint256(_getPrice());
+        thresholdPrice = currentPrice+((currentPrice * increaseRate) / 1e4);
         return true;
     }
 
-
-    event ReferralAdded(address sender, address referral);
-    event RewardsClaimed(address claimer,uint amount,uint64 destinationSelector);
-    event MilestoneReached(uint256 milestone);
-    event BotCheckFailed(address botAddress);
-    event CannotReferYourself();
-    event FunctionsError(string err);
-    event FunctionsRequestFulfilled(
-        bytes32  requestId,
-        bytes  data,
-        bytes  error
-    );
-
-
+    /// @notice Called by the referral with a referral code to join the campaign
+    /// @dev With help of Chainlink functions, the caller is verified for anti-bot and the referral code is validated
+    /// @param args Pass the referral code as the first argument
+    /// @param slotId The slotId of the DON encrypted secrets
+    /// @param version The version of the DON encrypted secrets
+    /// @param encryptedSecretsUrls The encrypted secrets urls of the Chainlink Functions (LEAVE EMPTY)
+    /// @param bytesArgs The bytesArgs of the Chainlink Functions (LEAVE EMPTY)
     function addReferral(string[] memory args, uint8 slotId,uint64 version, bytes memory encryptedSecretsUrls,bytes[] memory bytesArgs)public{
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(validationSourceCode);
@@ -112,21 +140,27 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         referralCodeToReferredCount[args[0]]+=1;
         
         args[1]=Strings.toHexString(uint256(uint160(msg.sender)), 20);
-        if (encryptedSecretsUrls.length > 0)
-            req.addSecretsReference(encryptedSecretsUrls);
-        else if (version > 0) {
+        if(encryptedSecretsUrls.length>0) req.addSecretsReference(encryptedSecretsUrls);
+        else if (version > 0)
             req.addDONHostedSecrets(
                 slotId,
                 version
             );
-        }
 
         if (args.length > 0) req.setArgs(args);
         if (bytesArgs.length > 0) req.setBytesArgs(bytesArgs);
         req.setArgs(args);
-        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(msg.sender,args[0]);    
+        requestIdsToReferrals[_sendRequest(req.encodeCBOR(), subscriptionId, functionsCallbackGasLimit, donId)] = Referral(msg.sender,args[0]);  
+        referralTier[msg.sender]=referralTier[rootReferral]+1;
+        
     }
 
+
+    /// @notice Callback function of the Chainlink Functions request
+    /// @dev Emits the FunctionsRequestFulfilled event which is listened by the Log Trigger Automation which updates the referral network
+    /// @param requestId The requestId of the Chainlink Functions request
+    /// @param response The response of the Chainlink Functions request
+    /// @param err The error returned by the Chainlink Functions request    
     function fulfillRequest(
         bytes32 requestId,
         bytes memory response,
@@ -135,9 +169,10 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         emit FunctionsRequestFulfilled(requestId, response, err);
     }
 
-
-
-
+    /// @notice Called by the users in the network to claim their rewards
+    /// @dev The rewards are calculated based on the milestones reached and the tier of the user. With the help of Chainlink CCIP, the rewards can be claimed on any chain.
+    /// @param destinationAddress The address of the user to receive the rewards
+    /// @param destinationSelector The chain selector of the destination chain where the user would like to claim the rewards
     function claimRewards(address destinationAddress,uint64 destinationSelector)public{
         uint rewards=_getRewards();
         require(rewards>0,"No rewards");
@@ -152,6 +187,13 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         emit RewardsClaimed(msg.sender,rewards,destinationSelector);
     }
 
+
+    /// @notice Internal function which is called on claimRewards
+    /// @dev With the help of Chainlink CCIP, the rewards are transferred to the destination chain
+    /// @param destinationAddress The address of the user to receive the rewards
+    /// @param _destinationChainSelector The chain selector of the destination chain where the user would like to claim the rewards
+    /// @param rewards The amount of rewards to be transferred
+    /// @return messageId The messageId of the Chainlink CCIP request
     function _transferCrosschain(address destinationAddress,uint64 _destinationChainSelector,uint256 rewards) internal returns(bytes32 messageId)
     {
         Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
@@ -179,6 +221,13 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
             return messageId;
     }
 
+    /// @notice Internal function to build the Chainlink CCIP message
+    /// @dev The Chainlink CCIP message is built with the help of Chainlink CCIP library
+    /// @param _receiver The address of the user to receive the rewards
+    /// @param _token The address of the token to be transferred
+    /// @param _amount The amount of tokens to be transferred
+    /// @param _feeTokenAddress The address of the token to be used as fee
+    /// @return Client EVM2AnyMessage The Chainlink CCIP message
     function _buildCCIPMessage(
         address _receiver,
         address _token,
@@ -207,6 +256,9 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         return _reachMilestone();
     }
 
+    /// @notice Internal function which is called by the Chainlink Custom Logic Automation on reaching the threshold price for the milestone
+    /// @dev The milestone is updated and the rewards are updated to be claimed for the milestone
+    /// @return success returns true if the milestone is successfully updated
     function _reachMilestone() internal returns(bool){
         milestonesReached++;
         uint rewards=milestoneTotalSupply*rewardPercentPerMilestone/100;
@@ -217,22 +269,30 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         return true;
     }
 
-
-
+    /// @notice Internal function which returns the current price of the token with the help of Chainlink Price Feeds
     function _getPrice() internal view returns (int) {
         (,int answer,,,) = dataFeed.latestRoundData();
         return answer;
     } 
 
+    /// @notice Called by the Chainlink Log Trigger Automation when the FunctionsRequestFulfilled Event is emitted
+    /// @dev The Chainlink Log Trigger Automation toggles upkeep needed on receiving the event
+    /// @param log The Chainlink Log Trigger Automation log Struct
+    /// @param checkData The checkData of the Chainlink Log Trigger Automation
+    /// @return upkeepNeeded returns true if the event is received
+    /// @return performData The performData of the Chainlink Log Trigger Automation
     function checkLog(
         ILogAutomation.Log calldata log,
-        bytes memory
+        bytes memory checkData
     ) external pure returns (bool upkeepNeeded, bytes memory performData) {
         upkeepNeeded = true;
         performData=log.data;
     }
     
-
+    /// @notice Called by the Chainlink Custom Logic Automation to check if the threshold price is reached
+    /// @dev The threshold price is checked and if reached upkeep is toggled to perform the milestone update
+    /// @return upkeepNeeded returns true if the threshold price is reached
+    /// @return performData The performData of the Chainlink Log Trigger Automation
     function checkUpkeep(
         bytes calldata
     )
@@ -246,9 +306,17 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         performData="";
     }
 
+    /// @notice Called by the Chainlink Automation to perform the automation
+    /// @dev If performData is present, then it is decoded to get the requestId, response and err of the Chainlink Functions request which is used to update the referral network
+    /// @dev If performData is not present, then the threshold price is updated and the milestone is reached
+    /// @param performData The performData of the Chainlink Automation
     function performUpkeep(bytes calldata performData) external override {
         if(performData.length==0)
-       _reachMilestone();
+        {
+            uint256 currentPrice=uint256(_getPrice());
+            thresholdPrice=currentPrice*((currentPrice * increaseRate) / 1e4);
+           _reachMilestone();
+        }
        else{
     (bytes32 requestId,bytes memory response,bytes memory err) = abi.decode(performData,(bytes32,bytes,bytes));
       Referral memory referral=requestIdsToReferrals[requestId];
@@ -275,24 +343,30 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
        }
     }
 
+    /// @notice Called by the Chainlink Automation to emit BotCheckFailed event if the address is a bot
+    /// @dev The referral is not added to the referral network
+    /// @param _botAddress The address of the bot which tried to enter the referral network         
     function _failBotCheck(address _botAddress) internal {
         require(referralTier[_botAddress]==0,"Already in network");
         emit BotCheckFailed(_botAddress);
     }
 
-
+    /// @notice Returns the referrals of the user
     function getReferred(address sender) public view returns (address[] memory){
       return referrals[sender];
     }
 
+    /// @notice Returns if the user is in the campaign
     function isInCampaign(address user) public view returns (bool) {
         return referralTier[user] > 0;
     }
 
+    /// @notice Returns the total claimmable rewards of the user
     function getRewards()external view returns(uint256){
         return _getRewards();
     }
 
+    /// @notice Internal function that returns the rewards claimable for the user
     function _getRewards() internal view returns(uint256){
         uint256 _tier=referralTier[msg.sender];
         uint256 _claimedMilestones=claimedMilestones[msg.sender];
@@ -301,6 +375,7 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         return _rewards;
     }
 
+    /// @notice Internal function that returns the rewards claimable for the user belonging to the tier
     function _tierToRewards(uint256 milestone,uint256 tier) internal view returns(uint256){
         uint256 _milestoneReward=milestoneRewards[milestone];
         if(tier<3) return _milestoneReward*(11-tier)/100;
@@ -308,6 +383,7 @@ contract Hypercluster is  FunctionsClient, ConfirmedOwner, AutomationCompatibleI
         else return _milestoneReward*(5**(tier-9))/(10*(tier-8));
     }
 
+    /// @notice Returns the next milestone rewards
     function _getNextMilestoneRewards() internal view returns(uint256){
         return milestoneTotalSupply*rewardPercentPerMilestone/100;
     }

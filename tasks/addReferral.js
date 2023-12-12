@@ -1,13 +1,9 @@
 const fs = require("fs")
 task("add-referral", "Adds a referral to the network").setAction(async (taskArgs, hre) => {
-  const referralCode = ["ajiofj", ""]
-  const slotId = "0"
-  const slotVersion = "1702323413"
+  const code = fs.readFileSync("./hypercluser-validation.js").toString()
   try {
-    const functionHash = ethers.utils.id("addReferral(string[],uint8,uint64)").slice(0, 10)
-    const encodedData = ethers.utils.defaultAbiCoder
-      .encode(["string[]", "uint8", "uint64"], [referralCode, slotId, slotVersion])
-      .slice(2)
+    const functionHash = ethers.utils.id("setSourceCode(string)").slice(0, 10)
+    const encodedData = ethers.utils.defaultAbiCoder.encode(["string"], [code]).slice(2)
     const data = functionHash + encodedData
     console.log("\nDATA\n\n" + data + "\n\n")
   } catch (error) {
